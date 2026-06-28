@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Certificate Extraction Engine (Gemini Edition)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght=400;500&family=IBM+Plex+Sans:wght=300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d0f12;
+    --surface: #141720;
+    --surface2: #1c2030;
+    --border: #2a2f42;
+    --border2: #363d55;
+    --accent: #a855f7;
+    --accent2: #7c3aed;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --text: #e8eaf0;
+    --text2: #8b91a8;
+    --text3: #555d7a;
+    --font: 'IBM Plex Sans', sans-serif;
+    --mono: 'IBM Plex Mono', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  .shell {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.02em;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--text2);
+  }
+  .badge-api {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: #25183a;
+    border: 1px solid #4c2a85;
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  .apibar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .apibar label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+    white-space: nowrap;
+    font-family: var(--mono);
+  }
+  .apibar input {
+    flex: 1;
+    min-width: 260px;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .apibar input:focus { border-color: var(--accent); }
+  .apibar input::placeholder { color: var(--text3); }
+  .apibar-note {
+    font-size: 11px;
+    color: var(--text3);
+    flex-basis: 100%;
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border2);
+    border-radius: 14px;
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag {
+    border-color: var(--accent);
+    background: rgba(168,85,247,0.04);
+  }
+  .upload-zone input { display: none; }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: var(--text2); }
+  .upload-formats {
+    display: inline-flex;
+    gap: 6px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .fmt-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text2);
+  }
+
+  .queue {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    transition: border-color 0.15s;
+  }
+  .queue-item.processing { border-color: var(--accent); }
+  .queue-item.done { border-color: #1a3a2a; }
+  .queue-item.error { border-color: #3a1a1a; }
+  .q-thumb {
+    width: 44px; height: 44px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    overflow: hidden;
+  }
+  .q-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .q-meta { flex: 1; min-width: 0; }
+  .q-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .q-status { font-size: 11px; }
+  .q-status.pending { color: var(--text3); }
+  .q-status.processing { color: var(--accent); }
+  .q-status.done { color: var(--green); }
+  .q-status.error { color: var(--red); }
+  .q-extracted {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text2);
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .q-remove {
+    background: none;
+    border: none;
+    color: var(--text3);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    transition: color 0.15s;
+  }
+  .q-remove:hover { color: var(--text); }
+  .spinner {
+    display: inline-block;
+    width: 11px; height: 11px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .actionbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 28px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+  .btn:hover:not(:disabled) { background: var(--surface2); border-color: var(--border2); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-accent {
+    background: var(--accent2);
+    border-color: var(--accent2);
+    color: #fff;
+  }
+  .btn-accent:hover:not(:disabled) { background: #6d28d9; border-color: #6d28d9; }
+  .btn-green {
+    background: #14532d;
+    border-color: #166534;
+    color: var(--green);
+  }
+  .btn-green:hover:not(:disabled) { background: #166534; }
+  .progress-wrap {
+    flex: 1;
+    min-width: 200px;
+    display: none;
+  }
+  .progress-track {
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .progress-label {
+    font-size: 11px;
+    color: var(--text2);
+    font-family: var(--mono);
+  }
+
+  .results-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-family: var(--mono);
+  }
+  .results-count {
+    font-size: 11px;
+    color: var(--text3);
+    font-family: var(--mono);
+  }
+  .table-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 16px;
+    background: var(--surface2);
+    color: var(--text3);
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-num { color: var(--text3); font-family: var(--mono); font-size: 12px; }
+  .td-file { font-size: 12px; color: var(--text2); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-name { font-weight: 500; font-size: 14px; }
+  .td-cert { font-family: var(--mono); font-size: 12px; color: var(--accent); }
+  .td-empty { text-align: center; padding: 48px !important; color: var(--text3); font-size: 13px; }
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .dot-pending { background: var(--text3); }
+  .dot-processing { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .dot-done { background: var(--green); }
+  .dot-error { background: var(--red); }
+  .dash { color: var(--text3); }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #3a1a1a;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-family: var(--mono);
+    max-width: 420px;
+    display: none;
+    z-index: 100;
+    animation: slideup 0.2s ease;
+  }
+  @keyframes slideup { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <div class="header">
+    <div class="header-left">
+      <div class="logo-row">
+        <div class="logo-icon">📜</div>
+        <h1>Certificate Extractor</h1>
+      </div>
+      <div class="subtitle">Extract Chinese name &amp; certificate number from images or PDFs → Excel</div>
+    </div>
+    <div class="badge-api">Powered by Google Gemini</div>
+  </div>
+
+  <div class="apibar">
+    <label>GEMINI_API_KEY</label>
+    <input type="password" id="apiKey" placeholder="AIzaSy..." spellcheck="false" />
+    <div class="apibar-note">⚠ Your key is used only in this browser session and never sent anywhere except googleapis.com</div>
+  </div>
+
+  <div class="upload-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <input type="file" id="fileInput" multiple accept="image/*,.pdf" />
+    <div class="upload-icon">⬆️</div>
+    <div class="upload-title">Drop certificate files here or click to browse</div>
+    <div class="upload-sub">Supports multiple files at once</div>
+    <div class="upload-formats">
+      <span class="fmt-badge">JPG</span>
+      <span class="fmt-badge">PNG</span>
+      <span class="fmt-badge">BMP</span>
+      <span class="fmt-badge">WEBP</span>
+      <span class="fmt-badge">PDF</span>
+    </div>
+  </div>
+
+  <div class="queue" id="queue"></div>
+
+  <div class="actionbar">
+    <button class="btn btn-accent" id="extractBtn" disabled onclick="runExtraction()">
+      ▶ Extract All
+    </button>
+    <button class="btn btn-green" id="exportBtn" disabled onclick="exportExcel()">
+      ↓ Download Excel
+    </button>
+    <button class="btn" onclick="clearAll()">✕ Clear</button>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="progress-label" id="progressLabel">Waiting…</div>
+    </div>
+  </div>
+
+  <div class="results-wrap">
+    <div class="results-header">
+      <span class="results-title">Extracted Records</span>
+      <span class="results-count" id="resultsCount">0 records</span>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>File Name</th>
+            <th>Chinese Name（中文名）</th>
+            <th>Certificate Number（证书编号）</th>
+            <th style="width:100px">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td class="td-empty" colspan="5">No files uploaded yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const files = [];
+const records = [];
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const extractBtn = document.getElementById('extractBtn');
+const exportBtn = document.getElementById('exportBtn');
+const queueEl = document.getElementById('queue');
+const tableBody = document.getElementById('tableBody');
+const resultsCount = document.getElementById('resultsCount');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const toast = document.getElementById('toast');
+
+// ── Drag & drop ─────────────────────────────────────────────────────────────
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('drag'); addFiles([...e.dataTransfer.files]); });
+fileInput.addEventListener('change', e => { addFiles([...e.target.files]); fileInput.value = ''; });
+
+function addFiles(newFiles) {
+  newFiles.forEach(f => {
+    if (!files.find(x => x.name === f.name && x.size === f.size)) {
+      files.push(f);
+      records.push({ name: '', certNum: '', status: 'pending', error: '' });
+    }
+  });
+  render();
+  extractBtn.disabled = files.length === 0;
+}
+
+function removeFile(i) {
+  files.splice(i, 1);
+  records.splice(i, 1);
+  render();
+  extractBtn.disabled = files.length === 0;
+  exportBtn.disabled = !records.some(r => r.status === 'done');
+}
+
+function clearAll() {
+  files.length = 0;
+  records.length = 0;
+  render();
+  extractBtn.disabled = true;
+  exportBtn.disabled = true;
+  progressWrap.style.display = 'none';
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  renderQueue();
+  renderTable();
+  resultsCount.textContent = `${records.filter(r => r.status === 'done').length} / ${records.length} records`;
+}
+
+function renderQueue() {
+  if (files.length === 0) { queueEl.innerHTML = ''; return; }
+  queueEl.innerHTML = files.map((f, i) => {
+    const r = records[i];
+    const isPdf = f.type === 'application/pdf';
+    const thumbHtml = isPdf
+      ? `<div class="q-thumb">📄</div>`
+      : `<div class="q-thumb"><img src="${URL.createObjectURL(f)}" alt="" /></div>`;
+    const stMap = { pending: 'Waiting', processing: '<span class="spinner"></span>Extracting…', done: '✓ Done', error: '✗ ' + (r.error || 'Error') };
+    const extracted = r.status === 'done' ? `${r.name || '—'}  ·  ${r.certNum || '—'}` : '';
+    return `<div class="queue-item ${r.status}">
+      ${thumbHtml}
+      <div class="q-meta">
+        <div class="q-name">${f.name}</div>
+        <div class="q-status ${r.status}">${stMap[r.status]}</div>
+        ${extracted ? `<div class="q-extracted">${extracted}</div>` : ''}
+      </div>
+      <button class="q-remove" onclick="removeFile(${i})" title="Remove">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderTable() {
+  if (files.length === 0) {
+    tableBody.innerHTML = '<tr><td class="td-empty" colspan="5">No files uploaded yet</td></tr>';
+    return;
+  }
+  const dotClass = { pending: 'dot-pending', processing: 'dot-processing', done: 'dot-done', error: 'dot-error' };
+  const stLabel = { pending: 'Pending', processing: 'Processing', done: 'Done', error: 'Error' };
+  tableBody.innerHTML = records.map((r, i) => `<tr>
+    <td class="td-num">${i + 1}</td>
+    <td class="td-file" title="${files[i].name}">${files[i].name}</td>
+    <td class="td-name">${r.name || '<span class="dash">—</span>'}</td>
+    <td class="td-cert">${r.certNum || '<span class="dash">—</span>'}</td>
+    <td><span class="status-dot ${dotClass[r.status]}"></span>${stLabel[r.status]}</td>
+  </tr>`).join('');
+}
+
+// ── Base64 helper ─────────────────────────────────────────────────────────────
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(',')[1]);
+    reader.onerror = () => rej(new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Extract single ────────────────────────────────────────────────────────────
+async function extractOne(idx) {
+  const f = files[idx];
+  const r = records[idx];
+  r.status = 'processing';
+  r.error = '';
+  render();
+
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) throw new Error('No API key entered');
+
+  const b64 = await toBase64(f);
+  const mediaType = f.type === 'application/pdf' ? 'application/pdf' : (f.type || 'image/jpeg');
+
+  // Format payload according to Google Gemini API structures
+  const payload = {
+    contents: [{
+      parts: [
+        {
+          inlineData: {
+            mimeType: mediaType,
+            data: b64
+          }
+        },
+        {
+          text: 'This is a Chinese certificate image or document. Please carefully look at the layout and text inside it to extract: 1. The Chinese name (中文姓名) of the holder. 2. The certificate number (证书编号). You must output your response inside a structured JSON scheme matching exactly: {"name": "<extracted name>", "cert_num": "<extracted number>"}'
+        }
+      ]
+    }],
+    generationConfig: {
+      responseMimeType: "application/json"
+    }
+  };
+
+  // Swapped URL structure pointing directly to the stable Gemini 2.5 Flash pipeline
+  const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+  }
+
+  const data = await resp.json();
+  
+  // Safely grab the text contents out of the Gemini structural array layout
+  let raw = "";
+  if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) {
+    raw = data.candidates[0].content.parts[0].text.trim();
+  } else {
+    throw new Error("No data received back from engine structure");
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const nm = raw.match(/"name"\s*:\s*"([^"]+)"/);
+    const cn = raw.match(/"cert_num"\s*:\s*"([^"]+)"/);
+    parsed = { name: nm?.[1] || '', cert_num: cn?.[1] || '' };
+  }
+
+  r.name = parsed.name || '';
+  r.certNum = parsed.cert_num || '';
+  r.status = 'done';
+}
+
+// ── Run all ───────────────────────────────────────────────────────────────────
+async function runExtraction() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { showToast('Please enter your Gemini API key first.'); return; }
+
+  extractBtn.disabled = true;
+  progressWrap.style.display = 'block';
+
+  const pending = records.map((r, i) => i).filter(i => records[i].status !== 'done');
+
+  for (let k = 0; k < pending.length; k++) {
+    const i = pending[k];
+    progressLabel.textContent = `Processing ${k + 1} / ${pending.length} — ${files[i].name}`;
+    progressFill.style.width = `${Math.round((k / pending.length) * 100)}%`;
+
+    try {
+      await extractOne(i);
+    } catch (err) {
+      records[i].status = 'error';
+      records[i].error = err.message;
+      showToast(`Error on "${files[i].name}": ${err.message}`);
+    }
+    render();
+  }
+
+  progressFill.style.width = '100%';
+  progressLabel.textContent = `Done — ${records.filter(r => r.status === 'done').length} extracted`;
+  extractBtn.disabled = false;
+  exportBtn.disabled = !records.some(r => r.status === 'done');
+}
+
+// ── Export Excel ──────────────────────────────────────────────────────────────
+function exportExcel() {
+  const rows = [['#', 'File Name', 'Chinese Name (中文名)', 'Certificate Number (证书编号)']];
+  records.forEach((r, i) => {
+    rows.push([i + 1, files[i].name, r.name, r.certNum]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 5 }, { wch: 36 }, { wch: 22 }, { wch: 28 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Certificates');
+  XLSX.writeFile(wb, 'certificates_extracted.xlsx');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 7000);
+}
+</script>
+</body>
+</html>
